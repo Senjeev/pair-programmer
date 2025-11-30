@@ -15,7 +15,7 @@ export function useAutocomplete() {
     }
 
     try {
-      const res = await fetch(`${BACKEND_HTTP_BASE}/autocomplete`, {
+      const res = await fetch(`${BACKEND_HTTP_BASE}/autocomplete/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

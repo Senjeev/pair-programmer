@@ -56,8 +56,12 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
     const newRoomId = generateRoomId(enteredUsername);
 
     try {
+      // const res = await fetch(
+      //   `http://localhost:8000/rooms?username=${enteredUsername}&roomId=${newRoomId}&limit=${limit}`,
+      //   { method: "POST" }
+      // );   
       const res = await fetch(
-        `http://localhost:8000/rooms?username=${enteredUsername}&roomId=${newRoomId}&limit=${limit}`,
+        `${process.env.REACT_APP_BACKEND_HTTP}/rooms?username=${enteredUsername}&roomId=${newRoomId}&limit=${limit}`,
         { method: "POST" }
       );
 
@@ -89,7 +93,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/rooms/${roomIdInput}?username=${enteredUsername}`
+        `${process.env.REACT_APP_BACKEND_HTTP}/rooms/${roomIdInput}?username=${enteredUsername}`
       );
 
       if (res.status === 409) return addPopup("User with this name already exists", "error");
@@ -189,7 +193,7 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
 
   const handleAutoJoin = async (roomId: string, username: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/rooms/${roomId}?username=${username}`);
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_HTTP}/rooms/${roomId}?username=${username}`);
 
       if (!res.ok) {
         addPopup("Room not found or full", "error");
