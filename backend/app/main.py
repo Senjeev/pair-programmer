@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
 from .routers import rooms, autocomplete, websockets
+import logging
+
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Pair Programming App")
 
 app.add_middleware(
@@ -9,7 +13,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 # Include routers
@@ -21,6 +25,6 @@ app.include_router(websockets.router)
 async def startup_event():
     try:
         Base.metadata.create_all(bind=engine)
-        print("Tables created successfully.")
-    except Exception as e:
-        print("Error creating tables:", e)
+        logger.info("Tables created successfully.")
+    except Exception:
+        logger.exception("Error creating tables: %s")

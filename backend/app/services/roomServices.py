@@ -14,21 +14,22 @@ class RoomService:
     def mark_user_offline(db: Session, room_id: str, username: str):
         if not username:
             return
+
         try:
             room = db.query(Room).filter(Room.id == room_id).first()
             if not room:
-                logger.debug("No room found for id %s", room_id)
+                logger.debug("No room found for id=%s", room_id)
                 return
 
             users = room.users or []
 
-            # Ensure MutableDict for all users
+            # Ensure MutableDict
             for i, u in enumerate(users):
                 if not isinstance(u, MutableDict):
                     try:
                         users[i] = MutableDict(u)
                     except Exception:
-                        users[i] = u
+                        logger.debug("Failed converting user to MutableDict: %s", u)
 
             updated = False
             for u in users:
@@ -44,37 +45,37 @@ class RoomService:
                 db.commit()
                 db.refresh(room)
 
-        except Exception as e:
-            logger.exception("Failed to mark user offline: %s", e)
+        except Exception:
+            logger.exception("Error marking user offline: %s")
             db.rollback()
 
 
     @staticmethod
     def active_user_objs(manager, room_id: str):
         try:
-            if room_id not in manager.active_connections:
-                return []
+            conns = manager.active_connections.get(room_id, [])
             return [
-                {"username": c["username"], "typing": c.get("typing", False), "online": True}
-                for c in manager.active_connections[room_id]
+                {
+                    "username": c["username"],
+                    "typing": c.get("typing", False),
+                    "online": True
+                }
+                for c in conns
             ]
-        except Exception as e:
-            logger.exception("Failed to get active user objects: %s", e)
+        except Exception:
+            logger.exception("Error getting active user objects: %s")
             return []
 
 
     @staticmethod
     async def send_user_list(room_id: str, db: Session, manager):
         try:
-            # Active users from manager
             active_users = RoomService.active_user_objs(manager, room_id)
             active_names = {u["username"] for u in active_users}
 
-            # DB users
             room = db.query(Room).filter(Room.id == room_id).first()
             db_users = list(room.users or []) if room else []
 
-            # Offline users
             offline_users = []
             for u in db_users:
                 uname = u.get("username")
@@ -88,21 +89,21 @@ class RoomService:
             final_list = active_users + offline_users
             msg = json.dumps({"type": "USER_UPDATE", "users": final_list})
 
-            # Broadcast to all active sockets
             async with manager._get_lock(room_id):
                 sockets = [c["socket"] for c in manager.active_connections.get(room_id, [])]
 
             dead_sockets = []
+
             for s in sockets:
                 try:
                     ok = await manager._safe_send(s, msg)
                     if not ok:
                         dead_sockets.append(s)
-                except Exception as e:
-                    logger.exception("Failed to send user list to a socket: %s", e)
+                except Exception :
+                    logger.exception("Failed sending to socket: %s")
                     dead_sockets.append(s)
-
             if dead_sockets:
                 await manager.remove_dead_sockets(room_id, dead_sockets)
-        except Exception as e:
-            logger.exception("Failed to send user list: %s", e)
+
+        except Exception:
+            logger.exception("Failed to send user list: %s")

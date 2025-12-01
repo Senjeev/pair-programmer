@@ -41,6 +41,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
   const createRoom = async () => {
     if (alreadyConnected()) return;
     if (!enteredUsername.trim()) return addPopup("Enter username", "error");
+    if (enteredUsername.trim().length<3) return addPopup("Username should have atleast 3 charcaters", "error");
 
     // Open modal to ask for room limit
     setLimitModalOpen(true);
@@ -84,6 +85,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
   const joinRoom = async () => {
     if (alreadyConnected()) return;
     if (!enteredUsername.trim()) return addPopup("Enter username", "error");
+    if (enteredUsername.trim().length<3) return addPopup("Username should have atleast 3 charcaters", "error");
     setRoomModalOpen(true);
   };
 

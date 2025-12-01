@@ -1,6 +1,6 @@
 # app/schemas.py
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 
 class UserSchema(BaseModel):
     username: str
@@ -9,7 +9,7 @@ class UserSchema(BaseModel):
 class RoomResponse(BaseModel):
     roomId: str
     users: List[UserSchema]
-    limit :Optional[int] = 10
+    limit : int
 
 
 class AutocompleteRequest(BaseModel):
