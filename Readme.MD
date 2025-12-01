@@ -199,7 +199,7 @@ This ensures:
 
 
 
-## 8. Improvements With More Time
+## 8. Improvements in Future
 
 ### 1. Secure Authentication & Authorization
 * **Add JWT login and role-based access:**
