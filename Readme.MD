@@ -231,9 +231,9 @@ This ensures:
 * Introduce **Redis Pub/Sub** or similar for cross-instance communication.
 * Support horizontal scaling for more users/rooms.
 
-## 4. Frontend Features
+## 9. Frontend Features
 
-### 4.1. Room Creation Flow
+### 9.1. Room Creation Flow
 * Users can create a room only after entering a valid username.
 * **Username validation rules:**
     * Must not be empty.
@@ -243,7 +243,7 @@ This ensures:
 * **Maximum allowed room limit:** 20 users.
 * Limit is validated before room creation; invalid limits are rejected with a UI alert.
 
-### 4.2. Room Join Functionality
+### 9.2. Room Join Functionality
 * Users can join an existing room using:
     * Room ID
     * Username
@@ -253,7 +253,7 @@ This ensures:
         * Another user cannot join using the same username.
         * UI shows: `"Username already exists"`.
 
-### 4.3. Code Editor UI
+### 9.3. Code Editor UI
 * The **Room ID** is displayed on the editor’s top-right corner (facilitating easy sharing).
 * **Typing indication** is implemented to show when a user is typing to others.
 * **User List:** Displays connected users (distinguishes online vs. offline using color differentiation).
