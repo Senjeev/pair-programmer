@@ -81,20 +81,25 @@ After that run the below command
 ```
 backend/
 │── app/
-│   ├── main.py
-│   ├── database.py
-│   ├── manager.py
-│   ├── models.py
-│   ├── schemas.py
+│   ├── main.py                
+│   ├── core/                  
+│   │   ├── config.py          
+│   │   └── database.py        
+│   ├── models/
+│   │   └── room.py            
+│   ├── schemas/
+│   │   └── schemas.py         
 │   ├── services/
-│   │     └── roomServices.py
+│   │   ├── room_service.py    
+│   │   └── websocket_manager.py 
 │   ├── routers/
-│   │     ├── rooms.py
-│   │     ├── autocomplete.py
-│   │     └── websockets.py
-│   └── constants.py
+│   │   ├── rooms.py           
+│   │   ├── autocomplete.py    
+│   │   └── websockets.py      
+│   └── utils/
+│       └── constants.py      
 │── requirements.txt
-│── README.md  
+│── README.md 
 ```
 
 ## 3. Architecture Overview
@@ -103,7 +108,7 @@ backend/
     - Provides WebSocket endpoints for real-time communication.
 * Postgres
    - Stores room state (users, last saved code).
-   - Stores room id (unique),list of users, lastly  saved code user name, room limit
+   - Stores room id (unique),list of users, lastly  saved code user name, room limit,created time, last updated tim
 * WebSocket
     - Tracks active connections.
     - Broadcasts code updates across users in a room.
@@ -158,9 +163,12 @@ This ensures:
 * Uses regex matching for prefix-based suggestions.
 
 ### 1.7. Service Layer
-* Centralizes user and room-related logic (e.g., marking offline, sending user list).
+* Centralizes user and room-related logic (e.g., user joining room ,marking offline, sending user list , broadcast typing,code,remove dead socketsd).
 * Promotes separation of concerns: WebSocket endpoint only handles communication, while services and managers handle DB operations and business logic.
 
+### 1.8. Last Write Win
+* The application implements a "Last Write Wins" approach for code synchronization.
+* When the server receives a code update via WebSocket, it broadcasts that specific state to all other users immediately. The latest message received by the server is treated as the "truth" and overwrites the previous state.
 
 ## 6. Endpoints
 
@@ -227,9 +235,11 @@ This ensures:
 * Replace current API with context-aware, **AI-driven suggestions**.
 * Supports multiple programming languages and smart code snippets.
 
-### 5. Multi-Instance Real-Time Sync
-* Introduce **Redis Pub/Sub** or similar for cross-instance communication.
-* Support horizontal scaling for more users/rooms.
+### 5.Advanced Conflict Resolution (CRDT/OT):
+
+*  "Last Write Wins" can overwrite concurrent edits if two users type in the exact same millisecond window.
+*  Implement Conflict-free Replicated Data Types (CRDTs) using libraries like Yjs or Automerge.
+*  Allows true Google Docs-style simultaneous editing where changes merge automatically character-by-character without data loss.
 
 ## 9. Frontend Features
 

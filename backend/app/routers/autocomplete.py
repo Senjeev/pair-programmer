@@ -1,10 +1,10 @@
 import logging
 from fastapi import APIRouter, HTTPException
-from ..schemas import AutocompleteRequest, AutocompleteResponse
+from ..schemas.schemas import AutocompleteRequest, AutocompleteResponse
 import re
 
 router = APIRouter(prefix="/autocomplete", tags=["autocomplete"])
-from ..constants import ALL_WORDS
+from app.utils.constants import ALL_WORDS
 
 logger = logging.getLogger(__name__)
 

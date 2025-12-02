@@ -3,22 +3,15 @@ from fastapi import WebSocket
 import asyncio
 import json
 import logging
-from sqlalchemy.orm import Session
-from app.services.roomServices import RoomService
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
-
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, List[Dict[str, Any]]] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
-
-        # NEW: in-memory latest code storage
         self.latest_code: Dict[str, str] = {}
 
-    # NEW methods
     def set_code(self, room_id: str, code: str):
         self.latest_code[room_id] = code
 
@@ -40,43 +33,29 @@ class ConnectionManager:
                     "typing": False
                 })
         except Exception:
-            logger.exception("Failed to connect websocket: %s")
+            logger.exception("Failed to connect websocket")
             try:
                 await websocket.close()
             except Exception:
                 pass
 
-    async def disconnect(self, room_id: str, websocket: WebSocket, db: Optional[Session] = None):
-        removed_conn = None
+    async def disconnect(self, room_id: str, websocket: WebSocket):
+
         try:
             async with self._get_lock(room_id):
                 if room_id not in self.active_connections:
                     return
 
-                remaining = []
-                for c in self.active_connections[room_id]:
-                    if c["socket"] == websocket:
-                        removed_conn = c
-                    else:
-                        remaining.append(c)
-
-                self.active_connections[room_id] = remaining
-
-                if not remaining:
+                self.active_connections[room_id] = [
+                    c for c in self.active_connections[room_id] 
+                    if c["socket"] != websocket
+                ]
+                if not self.active_connections[room_id]:
                     self.active_connections.pop(room_id, None)
                     self._locks.pop(room_id, None)
                     self.latest_code.pop(room_id, None)
-
         except Exception:
-            logger.exception("Error during websocket disconnect: %s")
-
-        if removed_conn and db:
-            try:
-                username = removed_conn.get("username")
-                if username:
-                    RoomService.mark_user_offline(db, room_id, username)
-            except Exception:
-                logger.exception("Failed to update DB offline status: %s")
+            logger.exception("Error during websocket disconnect")
 
         try:
             await websocket.close()
@@ -88,42 +67,33 @@ class ConnectionManager:
             await socket.send_text(data)
             return True
         except Exception:
-            try:
-                await socket.close()
-            except Exception:
-                pass
             return False
 
     async def broadcast_code(self, room_id: str, code: str, sender_socket: WebSocket):
         self.latest_code[room_id] = code
-
         try:
             async with self._get_lock(room_id):
                 if room_id not in self.active_connections:
                     return
-
-                sender = next(
-                    (c["username"] for c in self.active_connections[room_id]
-                     if c["socket"] == sender_socket),
-                    "Unknown"
-                )
-
-                sockets = [(c["socket"], c["username"]) for c in self.active_connections[room_id]]
-
+ 
+                connections = self.active_connections[room_id]
+                sender = next((c["username"] for c in connections if c["socket"] == sender_socket), "Unknown")
+     
+                sockets = [c["socket"] for c in connections]
         except Exception:
-            logger.exception("Failed to prepare code broadcast: %s")
+            logger.exception("Failed to prepare broadcast")
             return
 
         message = json.dumps({"type": "CODE_UPDATE", "code": code, "sender": sender})
+        
         dead_sockets = []
-
-        for socket, username in sockets:
+        for socket in sockets:
             if socket == sender_socket:
                 continue
-            ok = await self._safe_send(socket, message)
-            if not ok:
+            
+            if not await self._safe_send(socket, message):
                 dead_sockets.append(socket)
-
+        
         if dead_sockets:
             await self.remove_dead_sockets(room_id, dead_sockets)
 
@@ -152,6 +122,10 @@ class ConnectionManager:
                     self.active_connections.pop(room_id, None)
                     self._locks.pop(room_id, None)
                     self.latest_code.pop(room_id, None)
-
         except Exception:
-            logger.exception("Failed to remove dead sockets: %s")
+            logger.exception("Failed to remove dead sockets")
+
+manager_instance = ConnectionManager()
+
+def get_manager() -> ConnectionManager:
+    return manager_instance

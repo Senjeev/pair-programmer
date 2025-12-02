@@ -121,9 +121,9 @@ const handleEditLimitSubmit = async (value: string) => {
     const res = await fetch(`${process.env.REACT_APP_BACKEND_HTTP}/rooms/${roomId}/limit?new_limit=${newLimit}`, {
       method: "PATCH",
     });
-
     if (!res.ok) {
       const data = await res.json();
+      console.log(data);
       return showPopup("error", data.detail || "Failed to update limit");
     }
 

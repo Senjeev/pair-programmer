@@ -1,15 +1,12 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.mutable import MutableDict
 
-from typing import Optional
-from ..database import get_db
-from ..models import Room
-from ..schemas import RoomResponse, SaveRequest
-
+from app.core.database import get_db
+from app.models.room import Room
+from app.schemas.schemas import RoomResponse, SaveRequest
+from app.services.room_service import RoomService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -26,7 +23,8 @@ def create_room(
             return RoomResponse(
                 roomId=existing.id,
                 users=existing.users or [],
-                limit=existing.limit)
+                limit=existing.limit
+            )
 
         room = Room(
             id=roomId,
@@ -42,17 +40,12 @@ def create_room(
             users=room.users or [],
             limit=room.limit
         )
-
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
         logger.exception("SQLAlchemy error while creating room")
-        raise HTTPException(500, "Database error while creating room")
-
-    except HTTPException:
-        raise
-
+        raise HTTPException(500, "Database error")
     except Exception:
-        logger.exception("Unexpected error in create_room")
+        logger.exception("Unexpected error in creating room")
         raise HTTPException(500, "Unexpected server error")
 
 
@@ -63,43 +56,17 @@ def get_room(
     db: Session = Depends(get_db)
 ):
     try:
-        room = db.query(Room).filter(Room.id == room_id).first()
-        if not room:
-            raise HTTPException(404, "Room does not exist")
+        room = RoomService.join_room(db, room_id, username)
 
-        room.users = [MutableDict(u) for u in (room.users or [])]
-        print("New name",username)
-        active_usernames = {u["username"] for u in room.users}
-        print("Active usernames:", active_usernames)    
-        if len(room.users) >= room.limit and username not in active_usernames:
-            raise HTTPException(403, "Room is full")
-
-        existing = next((u for u in room.users if u["username"] == username), None)
-
-        if existing:
-            if existing.get("online"):
-                raise HTTPException(409, "User already online")
-            existing["online"] = True
-        else:
-            room.users.append(MutableDict({"username": username, "online": True}))
-
-        db.commit()
-        db.refresh(room)
         return RoomResponse(
             roomId=room.id,
             users=room.users or [],
-            limit=room.limit)
-
-    except SQLAlchemyError:
-        db.rollback()
-        logger.exception("SQLAlchemy error in get_room")
-        raise HTTPException(500, "Database error")
-
+            limit=room.limit
+        )
     except HTTPException:
         raise
-
     except Exception:
-        logger.exception("Unexpected error in get_room")
+        logger.exception("Unexpected error in joining room")
         raise HTTPException(500, "Unexpected server error")
 
 
@@ -115,20 +82,17 @@ def save_code(payload: SaveRequest, db: Session = Depends(get_db)):
 
         room.code = payload.code
         room.name = payload.username
-
         db.commit()
         return {"message": "Code saved successfully"}
 
     except SQLAlchemyError:
         db.rollback()
-        logger.exception("SQLAlchemy error in save_code")
+        logger.exception("SQLAlchemy error in save code")
         raise HTTPException(500, "Failed to save code")
-
     except HTTPException:
         raise
-
     except Exception:
-        logger.exception("Unexpected error in save_code")
+        logger.exception("Unexpected error while saving code")
         raise HTTPException(500, "Unexpected server error")
 
 @router.patch("/rooms/{room_id}/limit")
@@ -142,28 +106,14 @@ def update_room_limit(
         if not room:
             raise HTTPException(404, "Room not found")
 
-        current_limit = room.limit
-
-        if new_limit <= current_limit:
-            raise HTTPException(
-                400,
-                detail=f"New limit cannot be lower than or equal to current limit"
-            )
-
+        if new_limit <= room.limit:
+            raise HTTPException(400, "New limit cannot be lower than current limit")
         room.limit = new_limit
         db.commit()
         db.refresh(room)
-
         return {"message": "Room limit updated", "limit": new_limit}
-
-    except SQLAlchemyError:
-        db.rollback()
-        logger.exception("SQLAlchemy error in update_room_limit")
-        raise HTTPException(500, "Failed to update limit")
-
     except HTTPException:
         raise
-
     except Exception:
-        logger.exception("Unexpected error in update_room_limit")
-        raise HTTPException(500, "Unexpected server error")
+        logger.exception("Error updating limit")
+        raise HTTPException(500, "Failed to update limit")

@@ -1,7 +1,7 @@
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy import Column, String, Text, Integer, JSON, DateTime
 from sqlalchemy.sql import func
-from .database import Base
+from ..core.database import Base
 
 class Room(Base):
     __tablename__ = "rooms"

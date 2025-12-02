@@ -10,9 +10,11 @@ import ModalInput from "./components/ModalInput";
 import "./App.css";
 import BackgroundRays from "./components/BackgroundRays";
 
+// Helper to generate Room ID using trimmed username
 const generateRoomId = (username: string) => {
+  const safeUser = username.trim();
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `${username}-room-${random}`;
+  return `${safeUser}-room-${random}`;
 };
 
 interface RoomManagerProps {
@@ -24,9 +26,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
   const [enteredUsername, setEnteredUsername] = useState("");
   const [roomModalOpen, setRoomModalOpen] = useState(false);
   const [limitModalOpen, setLimitModalOpen] = useState(false);
-  const [pendingLimit, setPendingLimit] = useState<number>(10);
 
-  const username = useSelector((s: RootState) => s.editor.username);
   const roomId = useSelector((s: RootState) => s.editor.roomId);
 
   const alreadyConnected = () => {
@@ -40,8 +40,12 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
   // Step 1: Ask username & then room limit
   const createRoom = async () => {
     if (alreadyConnected()) return;
-    if (!enteredUsername.trim()) return addPopup("Enter username", "error");
-    if (enteredUsername.trim().length<3) return addPopup("Username should have atleast 3 charcaters", "error");
+
+    // TRIM HERE
+    const trimmedUsername = enteredUsername.trim();
+
+    if (!trimmedUsername) return addPopup("Enter username", "error");
+    if (trimmedUsername.length < 3) return addPopup("Username should have atleast 3 characters", "error");
 
     // Open modal to ask for room limit
     setLimitModalOpen(true);
@@ -49,20 +53,22 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
 
   const handleLimitSubmit = async (limitInput: string) => {
     setLimitModalOpen(false);
+    
+    // TRIM HERE
+    const trimmedUsername = enteredUsername.trim();
+
     const limit = parseInt(limitInput);
     if (isNaN(limit) || limit < 1 || limit > 10) {
       return addPopup("Room limit must be 1-10", "error");
     }
 
-    const newRoomId = generateRoomId(enteredUsername);
+    // Use trimmed username for generation
+    const newRoomId = generateRoomId(trimmedUsername);
 
     try {
-      // const res = await fetch(
-      //   `http://localhost:8000/rooms?username=${enteredUsername}&roomId=${newRoomId}&limit=${limit}`,
-      //   { method: "POST" }
-      // );   
+      // Use trimmedUsername in API call
       const res = await fetch(
-        `${process.env.REACT_APP_BACKEND_HTTP}/rooms?username=${enteredUsername}&roomId=${newRoomId}&limit=${limit}`,
+        `${process.env.REACT_APP_BACKEND_HTTP}/rooms?username=${trimmedUsername}&roomId=${newRoomId}&limit=${limit}`,
         { method: "POST" }
       );
 
@@ -71,7 +77,8 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
         return;
       }
 
-      dispatch(setUsername(enteredUsername));
+      // Store trimmed values in Redux
+      dispatch(setUsername(trimmedUsername));
       dispatch(setRoomId(newRoomId));
       addPopup(`Room created!`, "success");
       dispatch(setRoomLimit(limit));
@@ -84,18 +91,29 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
 
   const joinRoom = async () => {
     if (alreadyConnected()) return;
-    if (!enteredUsername.trim()) return addPopup("Enter username", "error");
-    if (enteredUsername.trim().length<3) return addPopup("Username should have atleast 3 charcaters", "error");
+    
+    // TRIM HERE
+    const trimmedUsername = enteredUsername.trim();
+
+    if (!trimmedUsername) return addPopup("Enter username", "error");
+    if (trimmedUsername.length < 3) return addPopup("Username should have atleast 3 characters", "error");
+    
     setRoomModalOpen(true);
   };
 
   const handleRoomSubmit = async (roomIdInput: string) => {
     setRoomModalOpen(false);
-    if (!roomIdInput.trim()) return addPopup("Room ID required", "error");
+
+    // TRIM BOTH INPUTS HERE
+    const trimmedRoomId = roomIdInput.trim();
+    const trimmedUsername = enteredUsername.trim();
+
+    if (!trimmedRoomId) return addPopup("Room ID required", "error");
 
     try {
+      // Use trimmed values in API call
       const res = await fetch(
-        `${process.env.REACT_APP_BACKEND_HTTP}/rooms/${roomIdInput}?username=${enteredUsername}`
+        `${process.env.REACT_APP_BACKEND_HTTP}/rooms/${trimmedRoomId}?username=${trimmedUsername}`
       );
 
       if (res.status === 409) return addPopup("User with this name already exists", "error");
@@ -104,8 +122,10 @@ const RoomManager: React.FC<RoomManagerProps> = ({ addPopup }) => {
       if (!res.ok) return addPopup("Server error", "error");
 
       const data = await res.json();
-      dispatch(setRoomId(roomIdInput));
-      dispatch(setUsername(enteredUsername));
+      
+      // Store trimmed values in Redux
+      dispatch(setRoomId(trimmedRoomId));
+      dispatch(setUsername(trimmedUsername));
       dispatch(setRoomLimit(data.limit));
       addPopup("Joined room successfully!", "success");
     } catch {
@@ -177,16 +197,18 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
     const match = pathname.match(/\/rooms\/([^\/\?]+)/);
     if (!match) return;
 
-    const roomId = match[1];
+    // Trim roomId from URL
+    const roomId = match[1].trim();
     setPendingRoomId(roomId);
 
     // Read username from query
     const query = new URLSearchParams(search);
-    const username = query.get("username");
+    const rawUsername = query.get("username");
 
-    if (username) {
-      // Username passed → auto join, no popup
-      handleAutoJoin(roomId, username);
+    if (rawUsername) {
+      // Trim username from URL parameters
+      const trimmedUsername = rawUsername.trim();
+      handleAutoJoin(roomId, trimmedUsername);
     } else {
       // Ask for username
       setUsernameModalOpen(true);
@@ -194,8 +216,12 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
   }, [pathname, search]);
 
   const handleAutoJoin = async (roomId: string, username: string) => {
+    // Ensure inputs are trimmed just in case
+    const safeRoomId = roomId.trim();
+    const safeUsername = username.trim();
+
     try {
-      const res = await fetch(`${process.env.REACT_APP_BACKEND_HTTP}/rooms/${roomId}?username=${username}`);
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_HTTP}/rooms/${safeRoomId}?username=${safeUsername}`);
 
       if (!res.ok) {
         addPopup("Room not found or full", "error");
@@ -203,8 +229,8 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
       }
 
       const data = await res.json();
-      dispatch(setUsername(username));
-      dispatch(setRoomId(roomId));
+      dispatch(setUsername(safeUsername));
+      dispatch(setRoomId(safeRoomId));
       dispatch(setRoomLimit(data.limit));
       addPopup("Joined via URL!", "success");
     } catch {
@@ -215,15 +241,18 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
 
   const handleUsernameSubmit = async (userInput: string) => {
     setUsernameModalOpen(false);
+    
+    // TRIM HERE
+    const trimmedInput = userInput.trim();
 
-    if (!userInput.trim()) {
+    if (!trimmedInput) {
       addPopup("Username required", "error");
       return navigate("/");
     }
 
     if (!pendingRoomId) return;
 
-    handleAutoJoin(pendingRoomId, userInput.trim());
+    handleAutoJoin(pendingRoomId, trimmedInput);
   };
 
   return (
