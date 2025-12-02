@@ -78,7 +78,7 @@ const CodeEditor: React.FC = () => {
     [dispatch, sendCode, handleEdit]
   );
 
-  // API: Save Room Name
+  // API: Save Room Code
  const saveCode = async () => {
   if (!roomId || !username) return showPopup("error", "Missing room or username.");
   try {
@@ -266,7 +266,7 @@ const handleEditLimitSubmit = async (value: string) => {
         {editLimitOpen && (
         <ModalInput
           title="Edit Room Limit"
-          placeholder="Enter new limit (1-20)"
+          placeholder="Enter new limit (1-10)"
           onSubmit={handleEditLimitSubmit}
           onClose={() => setEditLimitOpen(false)}
         />

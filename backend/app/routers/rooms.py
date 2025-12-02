@@ -68,8 +68,9 @@ def get_room(
             raise HTTPException(404, "Room does not exist")
 
         room.users = [MutableDict(u) for u in (room.users or [])]
-
+        print("New name",username)
         active_usernames = {u["username"] for u in room.users}
+        print("Active usernames:", active_usernames)    
         if len(room.users) >= room.limit and username not in active_usernames:
             raise HTTPException(403, "Room is full")
 
@@ -143,10 +144,10 @@ def update_room_limit(
 
         current_limit = room.limit
 
-        if new_limit < current_limit:
+        if new_limit <= current_limit:
             raise HTTPException(
                 400,
-                detail=f"New limit cannot be lower than current limit"
+                detail=f"New limit cannot be lower than or equal to current limit"
             )
 
         room.limit = new_limit
