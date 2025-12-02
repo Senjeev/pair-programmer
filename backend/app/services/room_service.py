@@ -1,6 +1,5 @@
 import json
 import logging
-from typing import List, Dict, Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.mutable import MutableDict
@@ -12,44 +11,46 @@ class RoomService:
 
     @staticmethod
     def join_room(db: Session, room_id: str, username: str):
-        try:
-            room = db.query(Room).filter(Room.id == room_id).first()
-            if not room:
-              raise HTTPException(status_code=404, detail="Room not found")
+        room = db.query(Room).filter(Room.id == room_id).first()
 
-            users_list = room.users or []
-            room.users = [MutableDict(u) for u in users_list]
-            active_usernames = {u["username"] for u in room.users}
+        if not room:
 
-            if len(room.users) >= room.limit and username not in active_usernames:
-                raise HTTPException(403, "Room is full")
-            existing_user = next((u for u in room.users if u["username"] == username.lower()), None)
+            raise HTTPException(404, "Room does not exist")
 
-            if existing_user:
-                existing_user["online"] = True
-            else:
-                room.users.append(MutableDict({"username": username, "online": True}))
+        users_list = room.users or []
+        room.users = [MutableDict(u) for u in users_list]
+        
+        active_usernames = {u["username"] for u in room.users}
 
-            db.commit()
-            db.refresh(room)
-            return room
-        except HTTPException:
-            raise
-        except Exception:
-            logger.exception(f"Error in joining room for {username}")
-            db.rollback()
-            raise
+        if len(room.users) >= room.limit and username not in active_usernames:
+            raise HTTPException(403, "Room is full")
+
+        existing_user = next((u for u in room.users if u["username"] == username.lower()), None)
+
+        if existing_user:
+            if existing_user.get("online"):
+                raise HTTPException(409, "User already online")
+            existing_user["online"] = True
+        else:
+            room.users.append(MutableDict({"username": username, "online": True}))
+
+        db.commit()
+        db.refresh(room)
+        return room
 
     @staticmethod
-    def mark_user_offline_sync(db: Session, room_id: str, username: str):
-        if not username: return
+    def mark_user_offline(db: Session, room_id: str, username: str):
+        if not username: 
+            return
+
         try:
             room = db.query(Room).filter(Room.id == room_id).first()
-            if not room: return
+            if not room: 
+                return
 
             users = room.users or []
             updated = False
-            
+
             for i, u in enumerate(users):
                 if not isinstance(u, MutableDict):
                     users[i] = MutableDict(u)
@@ -63,15 +64,35 @@ class RoomService:
                 room.users = users 
                 db.add(room)
                 db.commit()
+                db.refresh(room)                
         except Exception:
-            logger.exception(f"Error marking user {username} offline in DB")
+            logger.exception(f"Error marking user {username} offline")
             db.rollback()
 
     @staticmethod
-    def get_room_users_sync(db: Session, room_id: str, active_users_from_manager: List[Dict[str, Any]]):
+    def active_user_objs(manager, room_id: str):
+
         try:
-            active_names = {u["username"] for u in active_users_from_manager}
-            
+            conns = manager.active_connections.get(room_id, [])
+            return [
+                {
+                    "username": c["username"],
+                    "typing": c.get("typing", False),
+                    "online": True
+                }
+                for c in conns
+            ]
+        except Exception:
+            logger.exception("Error getting active user objects")
+            return []
+
+    @staticmethod
+    async def send_user_list(room_id: str, db: Session, manager):
+        try:
+
+            active_users = RoomService.active_user_objs(manager, room_id)
+            active_names = {u["username"] for u in active_users}
+
             room = db.query(Room).filter(Room.id == room_id).first()
             db_users = list(room.users or []) if room else []
 
@@ -85,28 +106,8 @@ class RoomService:
                         "typing": False
                     })
 
-            return active_users_from_manager + offline_users
-        except Exception:
-            logger.exception("Error calculating merged user list")
-            return []
-
-    @staticmethod
-    def get_active_user_objs(manager, room_id: str):
-        conns = manager.active_connections.get(room_id, [])
-        return [
-            {
-                "username": c["username"],
-                "typing": c.get("typing", False),
-                "online": True
-            }
-            for c in conns
-        ]
-
-    @staticmethod
-    async def broadcast_user_list(manager, room_id: str, final_user_list: list):
-        msg = json.dumps({"type": "USER_UPDATE", "users": final_user_list})
-
-        try:
+            final_list = active_users + offline_users
+            msg = json.dumps({"type": "USER_UPDATE", "users": final_list})
             async with manager._get_lock(room_id):
                 sockets = [c["socket"] for c in manager.active_connections.get(room_id, [])]
 
@@ -118,4 +119,4 @@ class RoomService:
             if dead_sockets:
                 await manager.remove_dead_sockets(room_id, dead_sockets)
         except Exception:
-            logger.exception("Error broadcasting user list")
+            logger.exception("Failed to send user list")

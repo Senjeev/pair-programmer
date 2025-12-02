@@ -78,7 +78,6 @@ class ConnectionManager:
  
                 connections = self.active_connections[room_id]
                 sender = next((c["username"] for c in connections if c["socket"] == sender_socket), "Unknown")
-     
                 sockets = [c["socket"] for c in connections]
         except Exception:
             logger.exception("Failed to prepare broadcast")

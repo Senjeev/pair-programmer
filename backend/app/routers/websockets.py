@@ -1,19 +1,16 @@
 import json
 import logging
-import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.mutable import MutableDict
 
 from app.core.database import get_db
 from app.services.websocket_manager import ConnectionManager, get_manager
 from app.services.room_service import RoomService
+from app.models.room import Room
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-async def run_sync_db_op(func, *args):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, func, *args)
 
 @router.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(
@@ -21,7 +18,7 @@ async def websocket_endpoint(
     room_id: str, 
     username: str, 
     db: Session = Depends(get_db),
-    manager: ConnectionManager = Depends(get_manager)
+    manager: ConnectionManager = Depends(get_manager) 
 ):
     try:
         await manager.connect(room_id, websocket, username)
@@ -31,28 +28,39 @@ async def websocket_endpoint(
         return
 
     try:
-        room = await run_sync_db_op(RoomService.join_room, db, room_id, username)
+
+        room = db.query(Room).filter(Room.id == room_id).first()
+        if not room:
+            room = Room(id=room_id, users=[MutableDict({"username": username, "online": True})], limit=5)
+            db.add(room)
+            db.commit()
+        else:
+            users = room.users or []
+            existing = next((u for u in users if u.get("username") == username), None)
+            if existing:
+                existing["online"] = True
+            else:
+                users.append(MutableDict({"username": username, "online": True}))
+                room.users = users
+            db.commit()
 
         latest_code = manager.get_code(room_id)
+        if latest_code:
+            await websocket.send_json({
+                "type": "CODE_UPDATE", 
+                "code": latest_code, 
+                "sender": "System"
+            })
+        elif room.code:
+            await websocket.send_json({
+                "type": "CODE_UPDATE", 
+                "code": room.code, 
+                "sender": "System"
+            })
 
-        code_to_send = latest_code if latest_code is not None else (room.code or "")
-        
-        await websocket.send_json({
-            "type": "CODE_UPDATE", 
-            "code": code_to_send, 
-            "sender": "System"
-        })
-        
-        active_users = RoomService.get_active_user_objs(manager, room_id)
+        await RoomService.send_user_list(room_id, db, manager)
 
-        final_list = await run_sync_db_op(
-            RoomService.get_room_users_sync, 
-            db, 
-            room_id, 
-            active_users
-        )
-        await RoomService.broadcast_user_list(manager, room_id, final_list)
-
+        # 4. Message Loop
         while True:
             try:
                 raw = await websocket.receive_text()
@@ -65,26 +73,10 @@ async def websocket_endpoint(
 
                 elif msg_type == "TYPING_UPDATE":
                     await manager.broadcast_typing(room_id, websocket, data.get("typing", False))
-
-                    active_users = RoomService.get_active_user_objs(manager, room_id)
-
-                    final_list = await run_sync_db_op(
-                        RoomService.get_room_users_sync, 
-                        db, 
-                        room_id, 
-                        active_users
-                    )
-                    await RoomService.broadcast_user_list(manager, room_id, final_list)
+                    await RoomService.send_user_list(room_id, db, manager)
                 
                 elif msg_type == "USER_UPDATE":
-                     active_users = RoomService.get_active_user_objs(manager, room_id)
-                     final_list = await run_sync_db_op(
-                        RoomService.get_room_users_sync, 
-                        db, 
-                        room_id, 
-                        active_users
-                    )
-                     await RoomService.broadcast_user_list(manager, room_id, final_list)
+                     await RoomService.send_user_list(room_id, db, manager)
 
             except WebSocketDisconnect:
                 break
@@ -94,14 +86,6 @@ async def websocket_endpoint(
 
     finally:
         await manager.disconnect(room_id, websocket)
-
-        await run_sync_db_op(RoomService.mark_user_offline_sync, db, room_id, username)
-        active_users = RoomService.get_active_user_objs(manager, room_id)
-        final_list = await run_sync_db_op(
-            RoomService.get_room_users_sync, 
-            db, 
-            room_id, 
-            active_users
-        )
-        await RoomService.broadcast_user_list(manager, room_id, final_list)
+        RoomService.mark_user_offline(db, room_id, username)
+        await RoomService.send_user_list(room_id, db, manager)
         db.close()
