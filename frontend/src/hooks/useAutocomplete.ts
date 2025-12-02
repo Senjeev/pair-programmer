@@ -1,5 +1,4 @@
-// src/hooks/useAutocomplete.ts
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useEffect } from "react";
 import debounce from "lodash.debounce";
 
 const BACKEND_HTTP_BASE = process.env.REACT_APP_BACKEND_HTTP;
@@ -7,6 +6,8 @@ const BACKEND_HTTP_BASE = process.env.REACT_APP_BACKEND_HTTP;
 export function useAutocomplete() {
   const suggestionsRef = useRef<string[]>([]);
   const monacoRef = useRef<any | null>(null);
+  
+  const providerDisposableRef = useRef<any>(null);
 
   const fetchSuggestionsInner = async (word: string) => {
     if (!word) {
@@ -26,25 +27,33 @@ export function useAutocomplete() {
       });
 
       const data = await res.json();
+ 
       suggestionsRef.current = data?.suggestion ? [data.suggestion] : [];
 
-      // force suggest popup if monaco is present
+      // Force suggest popup if monaco is present
       const editor = monacoRef.current?.editorInstance;
-      editor?.getAction?.("editor.action.triggerSuggest")?.run?.();
+      
+      // Only trigger if we actually have suggestions and the widget isn't already visible
+      if (suggestionsRef.current.length > 0) {
+          editor?.getAction?.("editor.action.triggerSuggest")?.run?.();
+      }
     } catch (err) {
       suggestionsRef.current = [];
       if (process.env.REACT_APP_BACKEND_HTTP) console.error("autocomplete error", err);
     }
   };
 
-  // debounce to avoid spamming backend
   const fetchSuggestions = useCallback(debounce(fetchSuggestionsInner, 400), []);
 
   const init = useCallback((monaco: any, editorInstance: any) => {
     monacoRef.current = { monaco, editorInstance };
 
-    // register provider for python
-    monaco.languages.registerCompletionItemProvider("python", {
+
+    if (providerDisposableRef.current) {
+      providerDisposableRef.current.dispose();
+    }
+
+    providerDisposableRef.current = monaco.languages.registerCompletionItemProvider("python", {
       triggerCharacters: ["_", ".", " "],
       provideCompletionItems: (model: any, position: any) => {
         const suggestions = [...suggestionsRef.current];
@@ -72,6 +81,14 @@ export function useAutocomplete() {
         };
       },
     });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (providerDisposableRef.current) {
+        providerDisposableRef.current.dispose();
+      }
+    };
   }, []);
 
   return { init, fetchSuggestions, suggestionsRef };
