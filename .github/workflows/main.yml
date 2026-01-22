@@ -1,9 +1,9 @@
-name: Frontend CI/CD
+name: Frontend 
 
 on:
   push:
     branches: [ "main" ]
-    paths: [ "frontend/**" ] # Only run when frontend files change
+    paths: [ "frontend/**" ]
   pull_request:
     branches: [ "main" ]
     paths: [ "frontend/**" ]
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./frontend # Tells GitHub to look inside the 'frontend' folder
+        working-directory: ./frontend
 
     steps:
       - name: Checkout Code
@@ -31,7 +31,6 @@ jobs:
         run: npm run build
         env:
           # Injected locally just for the build check
-          CI: false
           REACT_APP_BACKEND_HTTP: "https://api_placeholder.com"
 
       - name: Deploy to Vercel
@@ -42,4 +41,3 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
-          working-directory: ./frontend 
