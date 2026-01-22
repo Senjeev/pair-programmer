@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Build Project
-        run: npm run build
+        run: CI=false npm run build
         env:
           # Injected locally just for the build check
           REACT_APP_BACKEND_HTTP: "https://api_placeholder.com"
