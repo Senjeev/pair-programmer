@@ -28,9 +28,10 @@ jobs:
         run: npm ci
 
       - name: Build Project
-        run: CI=false npm run build
+        run: npm run build
         env:
           # Injected locally just for the build check
+          CI: false
           REACT_APP_BACKEND_HTTP: "https://api_placeholder.com"
 
       - name: Deploy to Vercel
