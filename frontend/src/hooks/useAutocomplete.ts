@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useMemo } from "react";
 import debounce from "lodash.debounce";
 
 const BACKEND_HTTP_BASE = process.env.REACT_APP_BACKEND_HTTP;
@@ -9,7 +9,8 @@ export function useAutocomplete() {
   
   const providerDisposableRef = useRef<any>(null);
 
-  const fetchSuggestionsInner = async (word: string) => {
+// Wrap the logic in useCallback to make it stable
+  const fetchSuggestionsInner = useCallback(async (word: string) => {
     if (!word) {
       suggestionsRef.current = [];
       return;
@@ -27,23 +28,22 @@ export function useAutocomplete() {
       });
 
       const data = await res.json();
- 
       suggestionsRef.current = data?.suggestion ? [data.suggestion] : [];
 
       // Force suggest popup if monaco is present
       const editor = monacoRef.current?.editorInstance;
-      
-      // Only trigger if we actually have suggestions and the widget isn't already visible
       if (suggestionsRef.current.length > 0) {
-          editor?.getAction?.("editor.action.triggerSuggest")?.run?.();
+        editor?.getAction?.("editor.action.triggerSuggest")?.run?.();
       }
     } catch (err) {
       suggestionsRef.current = [];
       if (process.env.REACT_APP_BACKEND_HTTP) console.error("autocomplete error", err);
     }
-  };
-
-  const fetchSuggestions = useCallback(debounce(fetchSuggestionsInner, 400), []);
+  }, []); // Dependencies are empty because refs are stable
+  const fetchSuggestions = useMemo(
+    () => debounce(fetchSuggestionsInner, 400),
+    [fetchSuggestionsInner] 
+  );
 
   const init = useCallback((monaco: any, editorInstance: any) => {
     monacoRef.current = { monaco, editorInstance };
