@@ -299,7 +299,7 @@ export default function App() {
 
         <div className="App">
           <header className="app-header">
-            <h1 className="app-title">PAIR - PROGRAMMING</h1>
+            <h1 className="app-title">PAIR - PROGRAMMING -- v2</h1>
             <p className="app-subtitle">Real-time collaborative coding</p>
           </header>
 
