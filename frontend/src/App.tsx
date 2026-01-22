@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Provider, useDispatch, useSelector } from "react-redux";
 import { store, RootState } from "./store/store";
 import { setRoomId, setRoomLimit, setUsername } from "./store/editorSlice";
@@ -189,34 +189,7 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
   const [pendingRoomId, setPendingRoomId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (hasRun.current) return;
-    hasRun.current = true;
-
-    // Match /rooms/<id>
-    const match = pathname.match(/\/rooms\/([^\/\?]+)/);
-    if (!match) return;
-
-    // Trim roomId from URL
-    const roomId = match[1].trim();
-    setPendingRoomId(roomId);
-
-    // Read username from query
-    const query = new URLSearchParams(search);
-    const rawUsername = query.get("username");
-
-    if (rawUsername) {
-      // Trim username from URL parameters
-      const trimmedUsername = rawUsername.trim();
-      handleAutoJoin(roomId, trimmedUsername);
-    } else {
-      // Ask for username
-      setUsernameModalOpen(true);
-    }
-  }, [pathname, search]);
-
-  const handleAutoJoin = async (roomId: string, username: string) => {
-    // Ensure inputs are trimmed just in case
+  const handleAutoJoin = useCallback(async (roomId: string, username: string) => {
     const safeRoomId = roomId.trim();
     const safeUsername = username.trim();
 
@@ -237,7 +210,35 @@ const RoomUrlHandler: React.FC<{ addPopup: (m: string, t?: any) => void }> = ({ 
       addPopup("Server error", "error");
       navigate("/");
     }
-  };
+  }, [addPopup, navigate, dispatch]);
+
+
+  useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
+
+    // Match /rooms/<id>
+    const match = pathname.match(/\/rooms\/([^/?]+)/);
+    if (!match) return;
+
+    // Trim roomId from URL
+    const roomId = match[1].trim();
+    setPendingRoomId(roomId);
+
+    // Read username from query
+    const query = new URLSearchParams(search);
+    const rawUsername = query.get("username");
+
+    if (rawUsername) {
+      // Trim username from URL parameters
+      const trimmedUsername = rawUsername.trim();
+      handleAutoJoin(roomId, trimmedUsername);
+    } else {
+      // Ask for username
+      setUsernameModalOpen(true);
+    }
+  }, [pathname, search, handleAutoJoin]);
+
 
   const handleUsernameSubmit = async (userInput: string) => {
     setUsernameModalOpen(false);
